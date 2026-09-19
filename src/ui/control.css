@@ -1,0 +1,284 @@
+:root {
+  color-scheme: dark;
+  --bg: #10141c;
+  --panel: #1a2230;
+  --panel-2: #222c3d;
+  --line: #334155;
+  --text: #e8eef8;
+  --muted: #93a4bb;
+  --accent: #5ee0b5;
+  --accent-2: #4ea8ff;
+  --danger: #ff6b7a;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, #1b2a44, transparent 28%),
+    var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+body {
+  padding: 24px;
+}
+
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+h1 {
+  font-size: 28px;
+}
+
+h2 {
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+
+.subtitle,
+.hint,
+.status {
+  color: var(--muted);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.status.online .status-dot {
+  background: var(--accent);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+
+.buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.anim-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  background: #141c28;
+  border-radius: 12px;
+}
+
+.anim-chip.custom {
+  grid-template-columns: none;
+}
+
+.anim-chip-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.anim-chip-actions > button {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.loop-toggle.active {
+  background: #1d4d45;
+  color: var(--accent);
+  outline: 1px solid var(--accent);
+}
+
+button.icon {
+  padding: 8px 0;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.upload {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  background: #141c28;
+}
+
+.upload.dragover {
+  border-color: var(--accent);
+}
+
+#anim-file {
+  flex: 1;
+  min-width: 180px;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+button.primary {
+  background: linear-gradient(180deg, var(--accent), #35c496);
+  color: #082018;
+  font-weight: 700;
+}
+
+button.secondary {
+  background: #2a3b55;
+}
+
+button.danger {
+  background: #4a2430;
+  color: #ffd5db;
+}
+
+button.active {
+  outline: 2px solid var(--accent);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+input,
+select {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #0f1622;
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 28px 1fr auto auto auto;
+  gap: 8px;
+  align-items: center;
+  background: var(--panel-2);
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.scenario-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scenario-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  background: var(--panel-2);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.current {
+  margin-top: 12px;
+  color: var(--accent-2);
+}
+
+.link {
+  color: var(--accent-2);
+}
+
+@media (max-width: 900px) {
+  .grid,
+  .step {
+    grid-template-columns: 1fr;
+  }
+}

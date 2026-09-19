@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>TEST FBX</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #101418;
+    }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: #fff;
+      font-family: monospace;
+      font-size: 13px;
+      z-index: 10;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">loading...</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const info = document.getElementById('info');
+    const log = (msg) => {
+      console.log(msg);
+      info.textContent += '\n' + msg;
+    };
+
+    // --- SCENE ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x101418);
+
+    // --- CAMERA ---
+    const camera = new THREE.PerspectiveCamera(
+      45,
+      window.innerWidth / window.innerHeight,
+      0.01,
+      10000
+    );
+    camera.position.set(0, 2, 6);
+
+    // --- LIGHTS ---
+    scene.add(new THREE.AmbientLight(0xffffff, 3));
+
+    const dir = new THREE.DirectionalLight(0xffffff, 4);
+    dir.position.set(5, 10, 5);
+    dir.castShadow = true;
+    scene.add(dir);
+
+    // helpers (можно убрать)
+    scene.add(new THREE.GridHelper(10, 10));
+    scene.add(new THREE.AxesHelper(2));
+
+    // --- RENDERER ---
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    // --- CONTROLS (чтобы можно было вращать и найти модель) ---
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1, 0);
+    controls.update();
+
+    // --- LOAD FBX ---
+    // !!! ЗАМЕНИ НА СВОЙ ПУТЬ !!!
+    const FBX_PATH = '/models/characters/default.fbx';
+
+    log('Loading: ' + FBX_PATH);
+
+    const loader = new FBXLoader();
+
+    loader.load(
+      FBX_PATH,
+      (fbx) => {
+        log('FBX loaded ✔');
+        log('Type: ' + fbx.type);
+        log('Children: ' + fbx.children.length);
+
+        let meshCount = 0;
+        let boneCount = 0;
+        let skinnedCount = 0;
+
+        fbx.traverse((obj) => {
+          if (obj.isMesh) {
+            meshCount++;
+            obj.castShadow = true;
+            obj.receiveShadow = true;
+
+            // Частая проблема — у меша кривые материалы.
+            // Раскомментируй, если модель "невидимая", но меши есть:
+            // obj.material = new THREE.MeshStandardMaterial({ color: 0xff8844 });
+
+            log('  Mesh: ' + obj.name + ' | visible=' + obj.visible);
+          }
+          if (obj.isSkinnedMesh) skinnedCount++;
+          if (obj.isBone) boneCount++;
+        });
+
+        log('Meshes: ' + meshCount);
+        log('SkinnedMeshes: ' + skinnedCount);
+        log('Bones: ' + boneCount);
+
+        // --- Размеры до добавления ---
+        const boxBefore = new THREE.Box3().setFromObject(fbx);
+        const sizeBefore = new THREE.Vector3();
+        boxBefore.getSize(sizeBefore);
+        log('Size (before scale): ' +
+          sizeBefore.x.toFixed(3) + ' x ' +
+          sizeBefore.y.toFixed(3) + ' x ' +
+          sizeBefore.z.toFixed(3));
+
+        // --- Центрирование по X/Z и посадка на Y=0 ---
+        const center = new THREE.Vector3();
+        boxBefore.getCenter(center);
+        fbx.position.x -= center.x;
+        fbx.position.z -= center.z;
+        fbx.position.y -= boxBefore.min.y;
+
+        // --- Автоскейл до высоты 3 ---
+        const maxSize = Math.max(sizeBefore.x, sizeBefore.y, sizeBefore.z);
+        if (maxSize > 0) {
+          const s = 3 / maxSize;
+          fbx.scale.set(s, s, s);
+          log('Scale applied: ' + s.toFixed(4));
+        }
+
+        scene.add(fbx);
+
+        // --- Размеры после ---
+        const boxAfter = new THREE.Box3().setFromObject(fbx);
+        const sizeAfter = new THREE.Vector3();
+        boxAfter.getSize(sizeAfter);
+        log('Size (after): ' +
+          sizeAfter.x.toFixed(3) + ' x ' +
+          sizeAfter.y.toFixed(3) + ' x ' +
+          sizeAfter.z.toFixed(3));
+        log('Box min: ' + JSON.stringify(boxAfter.min));
+        log('Box max: ' + JSON.stringify(boxAfter.max));
+
+        log('READY');
+      },
+      (xhr) => {
+        if (xhr.total) {
+          log('Progress: ' + ((xhr.loaded / xhr.total) * 100).toFixed(0) + '%');
+        } else {
+          log('Progress: ' + xhr.loaded + ' bytes');
+        }
+      },
+      (err) => {
+        console.error(err);
+        log('ERROR: ' + err.message);
+      }
+    );
+
+    // --- RESIZE ---
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- LOOP ---
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
