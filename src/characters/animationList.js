@@ -17,6 +17,12 @@ export const animations = {
     label: 'Стойка'
   },
 
+  Run: {
+    path: `${CHARACTER_DIR}/Slow Run.fbx`,
+    loop: true,
+    label: 'Бег'
+  },
+
   Waving: {
     path: `${CHARACTER_DIR}/Waving Gesture.fbx`,
     loop: false,

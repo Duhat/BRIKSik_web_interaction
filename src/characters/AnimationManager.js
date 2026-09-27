@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 console.log('[MODULE] AnimationManager.js загружен');
 
-export const DEFAULT_FADE_DURATION = 0.65;
+export const DEFAULT_FADE_DURATION = 0.75;
 
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -21,6 +21,7 @@ export class AnimationManager {
     this.autoIdleEnabled = true;
     this.onPlay = null;
     this._blend = null;
+    this._retiringActions = new Set();
 
     this.setupAutoIdle();
 
@@ -35,6 +36,7 @@ export class AnimationManager {
     }
 
     const action = this.mixer.clipAction(clip);
+    action.setEffectiveWeight(0);
 
     this.animationSettings[name] = { loop };
 
@@ -98,7 +100,7 @@ export class AnimationManager {
   play(name, fadeDuration = DEFAULT_FADE_DURATION, options = {}) {
     console.log(`[ANIMATION MANAGER] play("${name}")`);
 
-    const nextAction = this.actions[name];
+    let nextAction = this.actions[name];
 
     if (!nextAction) {
       console.error(`[ANIMATION MANAGER] Анимация "${name}" НЕ найдена`);
@@ -111,6 +113,21 @@ export class AnimationManager {
       : options.once === false
         ? true
         : Boolean(settings.loop);
+
+    // Keep the phase when selecting an already playing movement again.
+    if (this.currentAction === nextAction && nextAction.isRunning() && !options.restart) {
+      this.applyLoopMode(nextAction, loop);
+      return;
+    }
+
+    // A held final pose must fade out independently of the restarted clip.
+    if (nextAction.isScheduled() && nextAction.getEffectiveWeight() > 0 &&
+        (nextAction.paused || options.restart)) {
+      this._retiringActions.add(nextAction);
+      nextAction = this.mixer.clipAction(nextAction.getClip().clone());
+      nextAction.setEffectiveWeight(0);
+      this.actions[name] = nextAction;
+    }
 
     this.applyLoopMode(nextAction, loop);
     this._beginBlend(nextAction, fadeDuration, loop);
@@ -129,28 +146,29 @@ export class AnimationManager {
     const duration = Math.max(0.05, fadeDuration);
     const from = [];
 
-    for (const action of Object.values(this.actions)) {
+    for (const action of [...Object.values(this.actions), ...this._retiringActions]) {
       const weight = action.getEffectiveWeight();
 
       if (action === nextAction) {
         continue;
       }
 
-      if (weight > 0.001 || action.isRunning()) {
+      if (action.isScheduled() && weight > 0) {
         from.push({ action, startWeight: weight });
       }
     }
 
-    const restarting = this.currentAction === nextAction;
-    const startWeight = restarting ? 0 : nextAction.getEffectiveWeight();
+    const continuing = nextAction.isScheduled() && !nextAction.paused;
+    const startWeight = continuing ? Math.max(0, nextAction.getEffectiveWeight()) : 0;
 
     nextAction.enabled = true;
     nextAction.paused = false;
-    nextAction.reset();
+    if (!continuing) nextAction.reset();
     nextAction.setEffectiveTimeScale(1);
     nextAction.setEffectiveWeight(startWeight);
     this.applyLoopMode(nextAction, loop);
     nextAction.play();
+    nextAction.setEffectiveWeight(startWeight);
 
     this._blend = {
       from,
@@ -178,6 +196,9 @@ export class AnimationManager {
         for (const { action } of this._blend.from) {
           action.stop();
           action.setEffectiveWeight(0);
+          if (this._retiringActions.delete(action)) {
+            this.mixer.uncacheAction(action.getClip(), this.model);
+          }
         }
 
         this._blend.to.setEffectiveWeight(1);

@@ -16,10 +16,13 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { loadCharacter } from './loaders/loadCharacter.js';
-import { loadAnimation, loadAnimationFromBuffer } from './loaders/loadAnimation.js';
+import { loadAnimation, loadAnimationFromBuffer, prepareClipForModel } from './loaders/loadAnimation.js';
 import { CharacterController } from './characters/CharacterController.js';
+import { applyBarsAppearance } from './characters/applyBarsAppearance.js';
 import { loadSkybox } from './scene/loadSkybox.js';
 import { createPlatform } from './scene/createPlatform.js';
+import { createFlag } from './scene/createFlag.js';
+import { loadFlag } from './shared/flagStore.js';
 import {
   animations,
   CHARACTER_MODEL_PATH,
@@ -75,10 +78,10 @@ camera.lookAt(0, 1, 0);
 // LIGHTS
 // ============================================================
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 3);
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 4);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 2.2);
 directionalLight.position.set(5, 10, 5);
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.set(2048, 2048);
@@ -140,14 +143,30 @@ controls.update();
 let character = null;
 let scenarioPlayer = null;
 const characterChannel = createCharacterChannel();
+const stageFlag = createFlag(scene);
+let flagRefresh = 0;
+async function refreshFlag(requestId) {
+  const refresh = ++flagRefresh;
+  try {
+    const record = await loadFlag();
+    if (refresh !== flagRefresh) return;
+    await stageFlag.apply(record);
+    if (refresh !== flagRefresh) return;
+    if (requestId) post(characterChannel, MessageType.FLAG_RESULT, { requestId });
+  } catch (error) {
+    console.error('[FLAG]', error);
+    if (requestId) post(characterChannel, MessageType.FLAG_RESULT, { requestId, error: error.message });
+  }
+}
+refreshFlag();
 
 let isJumping = false;
 
-// Плавность
-const FADE_IN_ANIM = 0.35;   // вход в разовые
-const FADE_IN_JUMP = 0.30;   // вход в прыжок
-const FADE_TO_IDLE = 0.45;   // возврат в Idle
-const FADE_IDLE_BASE = 0.35;
+// Плавность переходов между клипами
+const FADE_IN_ANIM = 0.75;
+const FADE_IN_JUMP = 0.55;
+const FADE_TO_IDLE = 0.8;
+const FADE_IDLE_BASE = 0.65;
 
 // После этих анимаций играем прыжок перед Idle
 const JUMP_AFTER = new Set([
@@ -180,6 +199,9 @@ async function createCharacter() {
   // ----------------------------------------------------------
   console.log(`[MODEL] Загрузка ${CHARACTER_MODEL_PATH}`);
   const model = await loadCharacter(CHARACTER_MODEL_PATH);
+  await applyBarsAppearance(model, renderer).catch(error => {
+    console.error('[APPEARANCE] Не удалось загрузить окраску Барсика', error);
+  });
   console.log('[MODEL] Загружено:', model);
 
   // ----------------------------------------------------------
@@ -236,7 +258,7 @@ async function createCharacter() {
   const centerAfter = new THREE.Vector3();
   boxAfter.getCenter(centerAfter);
 
-  // 3) position
+  // 3) ставим стопы на верх площадки (y = 0)
   model.position.x -= centerAfter.x;
   model.position.z -= centerAfter.z;
   model.position.y -= boxAfter.min.y;
@@ -270,7 +292,14 @@ async function createCharacter() {
   // ----------------------------------------------------------
   for (const [name, config] of Object.entries(animations)) {
     try {
-      const clip = await loadAnimation(config.path);
+      const clip = prepareClipForModel(await loadAnimation(config.path), model);
+
+      if (!clip) {
+        console.warn(`[ANIMATION] Пропускаем "${name}": клип не подходит к скелету модели`);
+        delete animations[name];
+        continue;
+      }
+
       character.addAnimation(name, clip, config.loop);
       console.log(`[ANIMATION] ${name}: загружена (loop=${config.loop})`);
     } catch (error) {
@@ -289,7 +318,14 @@ async function createCharacter() {
 
   for (const [name, config] of Object.entries(jumps)) {
     try {
-      const clip = await loadAnimation(config.path);
+      const clip = prepareClipForModel(await loadAnimation(config.path), model);
+
+      if (!clip) {
+        console.warn(`[JUMP] Пропускаем "${name}": клип не подходит к скелету модели`);
+        delete jumps[name];
+        continue;
+      }
+
       character.addAnimation(name, clip, false);
       console.log(`[JUMP] ${name} загружен (${clip.duration.toFixed(2)}s)`);
     } catch (err) {
@@ -336,6 +372,10 @@ function attachJumpChain() {
       .find(n => actions[n] === finishedAction);
 
     if (!finishedName) return;
+
+    if (scenarioPlayer?.running) {
+      return;
+    }
 
     const isJump = !!jumps[finishedName];
 
@@ -401,6 +441,7 @@ window.addEventListener('keydown', (event) => {
 
   if (animationKeys.has(key)) {
     if (scenarioPlayer) scenarioPlayer.stop({ returnToIdle: false });
+    character.resetToHome({ playIdle: false, fadeDuration: FADE_IDLE_BASE });
 
     if (isJumping) {
       console.log('[CHAIN] Прерван пользователем');
@@ -473,6 +514,7 @@ function animate() {
   requestAnimationFrame(animate);
 
   const delta = clock.getDelta();
+  stageFlag.update(delta);
 
   if (character) character.update(delta);
   if (controls) controls.update();
@@ -547,7 +589,16 @@ async function registerCustomRecord(record) {
   }
 
   try {
-    const clip = loadAnimationFromBuffer(record.buffer, record.fileName ?? record.name);
+    const clip = prepareClipForModel(
+      loadAnimationFromBuffer(record.buffer, record.fileName ?? record.name),
+      character.model
+    );
+
+    if (!clip) {
+      console.warn(`[ANIMATION] Пропускаем ${record.name}: клип не подходит к скелету модели`);
+      return false;
+    }
+
     character.addAnimation(record.name, clip, loop);
     animations[record.name] = {
       loop,
@@ -610,6 +661,7 @@ function playFromControl(name, loop) {
   if (!character) return;
 
   if (scenarioPlayer) scenarioPlayer.stop({ returnToIdle: false });
+  character.resetToHome({ playIdle: false, fadeDuration: FADE_IDLE_BASE });
 
   const isOnce = (typeof loop === 'boolean')
     ? !loop
@@ -632,6 +684,11 @@ function playFromControl(name, loop) {
 
 characterChannel.addEventListener('message', (event) => {
   const data = event.data ?? {};
+
+  if (data.type === MessageType.FLAG_CHANGED) {
+    refreshFlag(data.requestId);
+    return;
+  }
 
   if (data.type === MessageType.HELLO || data.type === MessageType.PING) {
     post(characterChannel, MessageType.PONG);
@@ -659,7 +716,8 @@ characterChannel.addEventListener('message', (event) => {
 
   if (data.type === MessageType.PLAY_SCENARIO && data.scenario) {
     scenarioPlayer?.play(data.scenario);
-    setStatus(`Сценарий: ${data.scenario.name || 'без названия'}`);
+    const error = scenarioPlayer?.error;
+    setStatus(error || `Сценарий: ${data.scenario.name || 'без названия'}`);
     return;
   }
 

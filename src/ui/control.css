@@ -99,6 +99,12 @@ h2 {
   box-shadow: var(--shadow);
 }
 
+.flag-panel { grid-column: 1 / -1; }
+.flag-preview { display: block; max-width: 100%; width: 320px; height: 150px; object-fit: contain; background: var(--bg); margin: 12px 0; }
+.flag-preview[hidden] { display: none; }
+.flag-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.flag-panel input[type="checkbox"] { width: auto; }
+
 .buttons {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -265,6 +271,18 @@ select {
   background: var(--panel-2);
   border-radius: 12px;
   padding: 10px 12px;
+}
+
+.stage-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 12px 0 8px;
+}
+
+.stage-actions button {
+  min-height: 48px;
+  font-size: 16px;
 }
 
 .current {

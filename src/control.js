@@ -1,4 +1,5 @@
 import './ui/control.css';
+import { mountFlagPanel } from './ui/flagPanel.js';
 import { loadAnimationFromBuffer } from './loaders/loadAnimation.js';
 import { animations, getAnimationLabel } from './characters/animationList.js';
 import {
@@ -17,6 +18,12 @@ import {
   loadScenarios,
   upsertScenario
 } from './characters/ScenarioStore.js';
+import {
+  buildEntranceScenario,
+  buildExitScenario,
+  findRunAnimation,
+  isRunLikeFile
+} from './characters/stageMarks.js';
 import {
   MessageType,
   createCharacterChannel,
@@ -84,6 +91,17 @@ function sendScenario(scenario) {
   post(channel, MessageType.PLAY_SCENARIO, { scenario });
 }
 
+function sendStageScenario(scenario, missingLabel) {
+  const catalog = Object.fromEntries(state.catalog.map((item) => [item.name, item]));
+  if (!findRunAnimation(catalog)) {
+    state.uploadMessage = `Сначала добавьте анимацию ${missingLabel}: Mixamo Running / Jogging, включите цикл.`;
+    updateUploadStatus();
+    return;
+  }
+
+  sendScenario(scenario);
+}
+
 function sendStop() {
   post(channel, MessageType.STOP_SCENARIO);
 }
@@ -103,10 +121,11 @@ function renderApp() {
         </div>
       </div>
       <div class="grid">
+        <section class="panel flag-panel" id="flag-panel"></section>
         <section class="panel">
           <h2>Анимации</h2>
           <div class="upload" id="upload-zone">
-            <p class="hint">Загрузите FBX — после добавления появится новая кнопка.</p>
+            <p class="hint">Загрузите FBX — после добавления появится новая кнопка. Для входа и ухода нужен Mixamo Running или Jogging с галочкой «Зациклить», название например «Бег».</p>
             <div class="field">
               <label for="anim-label">Название кнопки</label>
               <input id="anim-label" placeholder="Например: Бросок" />
@@ -125,6 +144,11 @@ function renderApp() {
           <p class="hint">Цикл — повторять. «1 раз» — сыграть до конца и вернуться в покой. Режим можно менять у каждой кнопки.</p>
           <div class="buttons" id="animation-buttons"></div>
           <p class="current" id="scenario-status">Сценарий не запущен</p>
+          <div class="stage-actions">
+            <button class="primary" type="button" id="entrance-btn">Выбежать</button>
+            <button class="secondary" type="button" id="exit-btn">Убежать</button>
+          </div>
+          <p class="hint">Выбежать: вбегает слева, осматривается, машет и встаёт в стойку. Убежать: разворачивается и уходит вправо за кадр.</p>
           <div class="row">
             <button class="secondary" type="button" id="idle-btn">В покой</button>
             <button class="danger" type="button" id="stop-btn">Стоп сценария</button>
@@ -157,6 +181,12 @@ function renderApp() {
 
   document.getElementById('idle-btn').addEventListener('click', sendIdle);
   document.getElementById('stop-btn').addEventListener('click', sendStop);
+  document.getElementById('entrance-btn').addEventListener('click', () => {
+    sendStageScenario(buildEntranceScenario(), 'бега');
+  });
+  document.getElementById('exit-btn').addEventListener('click', () => {
+    sendStageScenario(buildExitScenario(), 'бега');
+  });
   document.getElementById('add-step').addEventListener('click', () => {
     syncDraftFromForm();
     state.draft.steps.push({
@@ -178,6 +208,7 @@ function renderApp() {
     setPendingFile(file);
   });
 
+  mountFlagPanel(document.getElementById('flag-panel'), channel);
   bindUploadZone(document.getElementById('upload-zone'));
 
   renderAnimationButtons();
@@ -221,6 +252,11 @@ function setPendingFile(file) {
   const labelInput = document.getElementById('anim-label');
   if (file && labelInput && !labelInput.value.trim()) {
     labelInput.value = file.name.replace(/\.fbx$/i, '');
+  }
+
+  const loopInput = document.getElementById('anim-loop');
+  if (file && loopInput && isRunLikeFile(file.name, labelInput?.value)) {
+    loopInput.checked = true;
   }
 }
 
@@ -572,9 +608,11 @@ function updateStatus() {
     ? `Дисплей на связи · сейчас: ${catalogLabel(state.currentAnimation)}`
     : 'Дисплей не найден. Откройте страницу персонажа в другой вкладке.';
 
-  scenarioStatus.textContent = state.scenario?.running
-    ? `Сценарий: шаг ${state.scenario.index + 1} из ${state.scenario.total}`
-    : 'Сценарий не запущен';
+  scenarioStatus.textContent = state.scenario?.error
+    ? state.scenario.error
+    : state.scenario?.running
+      ? `Сценарий: шаг ${state.scenario.index + 1} из ${state.scenario.total}`
+      : 'Сценарий не запущен';
 
   for (const button of document.querySelectorAll('#animation-buttons button[data-animation]')) {
     button.classList.toggle('active', button.dataset.animation === state.currentAnimation);

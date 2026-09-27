@@ -12,6 +12,8 @@ export const MessageType = {
   ADD_ANIMATION: 'add-animation',
   REMOVE_ANIMATION: 'remove-animation',
   SET_LOOP: 'set-loop',
+  FLAG_CHANGED: 'flag-changed',
+  FLAG_RESULT: 'flag-result',
   STATE: 'state'
 };
 
